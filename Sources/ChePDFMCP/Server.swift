@@ -273,7 +273,7 @@ actor PDFMCPServer {
                 ])
             ),
 
-            // B1. OCR (2 tools)
+            // B1. OCR (3 tools)
             Tool(
                 name: "pdf_ocr_text",
                 description: "Extract text from PDF using OCR (for scanned documents)",
@@ -329,6 +329,44 @@ actor PDFMCPServer {
                         ])
                     ]),
                     "required": .array([.string("page")])
+                ])
+            ),
+            Tool(
+                name: "pdf_ocr_math",
+                description: "OCR with mathematical formula recognition. Uses spatial analysis to detect subscripts, superscripts, and reconstruct LaTeX formulas.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ]),
+                        "page": .object([
+                            "type": .string("integer"),
+                            "description": .string("Page number (1-indexed)")
+                        ]),
+                        "start_page": .object([
+                            "type": .string("integer"),
+                            "description": .string("Start page for multi-page OCR (1-indexed)")
+                        ]),
+                        "end_page": .object([
+                            "type": .string("integer"),
+                            "description": .string("End page for multi-page OCR (1-indexed)")
+                        ]),
+                        "languages": .object([
+                            "type": .string("array"),
+                            "items": .object(["type": .string("string")]),
+                            "description": .string("Recognition languages (default: ['en-US'])")
+                        ]),
+                        "output_format": .object([
+                            "type": .string("string"),
+                            "description": .string("Output format: 'latex', 'plain', or 'both' (default: 'both')")
+                        ])
+                    ])
                 ])
             ),
 
@@ -678,6 +716,8 @@ actor PDFMCPServer {
             return try await pdfOcrText(args: args)
         case "pdf_ocr_page":
             return try await pdfOcrPage(args: args)
+        case "pdf_ocr_math":
+            return try await pdfOcrMath(args: args)
 
         // B2. Structured Output
         case "pdf_to_markdown":
@@ -1209,6 +1249,126 @@ actor PDFMCPServer {
             output += "    Size: \(Int(block.bounds.width)) x \(Int(block.bounds.height))\n"
             output += "    Confidence: \(String(format: "%.1f%%", block.confidence * 100))\n\n"
         }
+
+        return output
+    }
+
+    private func pdfOcrMath(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+        let languages = (try? getOptionalParameter(args: args, key: "languages", as: [String].self)) ?? ["en-US"]
+        let outputFormat = (try? getOptionalParameter(args: args, key: "output_format", as: String.self)) ?? "both"
+
+        // Determine page range
+        let singlePage = try? getOptionalParameter(args: args, key: "page", as: Int.self)
+        let startPage: Int
+        let endPage: Int
+
+        if let page = singlePage {
+            startPage = page
+            endPage = page
+        } else {
+            startPage = (try? getOptionalParameter(args: args, key: "start_page", as: Int.self)) ?? 1
+            endPage = (try? getOptionalParameter(args: args, key: "end_page", as: Int.self)) ?? doc.pageCount
+        }
+
+        guard startPage >= 1 && endPage <= doc.pageCount && startPage <= endPage else {
+            throw PDFError.invalidPageRange("pages \(startPage)-\(endPage) out of range (1-\(doc.pageCount))")
+        }
+
+        var allResults: [MathOCR.MathOCRResult] = []
+
+        for pageNum in startPage...endPage {
+            guard let page = doc.page(at: pageNum - 1) else {
+                continue
+            }
+
+            let result = try await MathOCR.performMathOCR(
+                on: page,
+                pageNumber: pageNum,
+                languages: languages
+            )
+            allResults.append(result)
+        }
+
+        // Format output based on requested format
+        var output = "# Math OCR Results\n\n"
+
+        // Show pattern loading info
+        let patternInfo = MathOCR.getPatternInfo()
+        output += "**Pattern Database**: \(patternInfo.total) patterns loaded"
+        if patternInfo.fromFile {
+            output += " (from YAML file)\n"
+        } else {
+            output += " (built-in fallback)\n"
+        }
+        let domainSummary = patternInfo.domains.sorted { $0.value > $1.value }
+            .prefix(5)
+            .map { "\($0.key): \($0.value)" }
+            .joined(separator: ", ")
+        if !domainSummary.isEmpty {
+            output += "**Top domains**: \(domainSummary)\n"
+        }
+        output += "\n"
+
+        for result in allResults {
+            output += "## Page \(result.pageNumber)\n\n"
+
+            if result.hasMathContent {
+                output += "**Mathematical content detected**\n\n"
+            }
+
+            switch outputFormat.lowercased() {
+            case "latex":
+                if result.fullLatex.isEmpty {
+                    output += "_No LaTeX formulas detected_\n\n"
+                } else {
+                    output += "### LaTeX\n```latex\n\(result.fullLatex)\n```\n\n"
+                }
+
+            case "plain":
+                output += "### Plain Text\n\(result.plainText)\n\n"
+
+            default: // "both"
+                output += "### Plain Text\n\(result.plainText)\n\n"
+
+                // Show detected patterns (from post-processing)
+                if !result.detectedPatterns.isEmpty {
+                    output += "### Detected Math Patterns\n"
+                    for pattern in result.detectedPatterns {
+                        output += "- \(pattern)\n"
+                    }
+                    output += "\n"
+                }
+
+                // Show reconstructed LaTeX (with pattern matching)
+                if !result.reconstructedLatex.isEmpty {
+                    output += "### Reconstructed LaTeX (Pattern-Based)\n```latex\n\(result.reconstructedLatex)\n```\n\n"
+                }
+
+                // Show spatial analysis results
+                if !result.fullLatex.isEmpty && result.fullLatex != result.reconstructedLatex {
+                    output += "### Spatial Analysis LaTeX\n```latex\n\(result.fullLatex)\n```\n\n"
+                }
+
+                // Show detected regions
+                if !result.regions.isEmpty {
+                    output += "### Detected Regions (\(result.regions.count))\n"
+                    for (i, region) in result.regions.enumerated() {
+                        output += "\(i + 1). Confidence: \(String(format: "%.1f%%", region.confidence * 100))\n"
+                        output += "   Elements: \(region.elements.count)\n"
+                        let types = region.elements.map { $0.type.rawValue }
+                        let uniqueTypes = Array(Set(types)).joined(separator: ", ")
+                        output += "   Types: \(uniqueTypes)\n\n"
+                    }
+                }
+            }
+        }
+
+        // Summary
+        let totalMathPages = allResults.filter { $0.hasMathContent }.count
+        let totalPatterns = allResults.flatMap { $0.detectedPatterns }.count
+        output += "---\n"
+        output += "**Summary**: Processed \(allResults.count) page(s), \(totalMathPages) with math content detected, \(totalPatterns) patterns found.\n"
 
         return output
     }
