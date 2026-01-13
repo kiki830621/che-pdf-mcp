@@ -9,7 +9,7 @@
 - **純 Swift 實作**：不需要 Python、Node.js 或其他執行環境
 - **macOS 原生 API**：使用 PDFKit 處理核心操作，Vision 處理 OCR
 - **單一執行檔**：只有一個 binary 檔案
-- **12 個 MCP 工具**（MVP）：文件資訊、文字提取、搜尋、合併、抽頁
+- **25 個 MCP 工具**：完整的 PDF 操作工具集
 - **高效能**：原生二進位檔，無解譯器開銷
 
 ## 安裝
@@ -74,6 +74,8 @@ claude mcp add che-pdf-mcp /path/to/che-pdf-mcp/.build/release/ChePDFMCP
 3. `pdf_search_text` - 搜尋 PDF 中的文字
 4. `pdf_merge` - 合併多個 PDF
 5. `pdf_extract_pages` - 抽取特定頁面
+6. `pdf_ocr_text` - OCR 掃描件
+7. `pdf_to_markdown` - 轉換為 Markdown
 ```
 
 ### Claude Code Skill
@@ -84,7 +86,7 @@ curl -o .claude/skills/che-pdf-mcp/SKILL.md \
   https://raw.githubusercontent.com/kiki830621/che-pdf-mcp/main/skills/che-pdf-mcp/SKILL.md
 ```
 
-## 可用工具（12 個 MVP 工具）
+## 可用工具（25 個工具）
 
 ### 文件存取（6 個）
 
@@ -112,6 +114,44 @@ curl -o .claude/skills/che-pdf-mcp/SKILL.md \
 | `pdf_merge` | 合併多個 PDF |
 | `pdf_extract_pages` | 抽取特定頁面 |
 | `pdf_save` | 儲存變更 |
+
+### OCR（2 個）
+
+| 工具 | 說明 |
+|------|------|
+| `pdf_ocr_text` | 使用 Vision OCR 從掃描 PDF 提取文字 |
+| `pdf_ocr_page` | OCR 單頁並回傳帶位置資訊的文字 |
+
+### 結構化輸出（2 個）
+
+| 工具 | 說明 |
+|------|------|
+| `pdf_to_markdown` | 轉換 PDF 為 Markdown 格式 |
+| `pdf_get_outline` | 取得 PDF 大綱/目錄 |
+
+### 圖片處理（2 個）
+
+| 工具 | 說明 |
+|------|------|
+| `pdf_extract_images` | 從 PDF 提取內嵌圖片 |
+| `pdf_render_page` | 將 PDF 頁面渲染為圖片 |
+
+### 偵測（2 個）
+
+| 工具 | 說明 |
+|------|------|
+| `pdf_detect_type` | 偵測 PDF 類型（文字/掃描/混合）|
+| `pdf_check_accessibility` | 檢查 PDF 可及性功能 |
+
+### 進階操作（5 個）
+
+| 工具 | 說明 |
+|------|------|
+| `pdf_rotate_pages` | 旋轉頁面 |
+| `pdf_split` | 分割 PDF 為多個檔案 |
+| `pdf_add_watermark` | 加入文字浮水印 |
+| `pdf_encrypt` | 使用密碼加密 PDF |
+| `pdf_url_fetch` | 從 URL 取得 PDF |
 
 ## 使用範例
 
@@ -145,13 +185,56 @@ curl -o .claude/skills/che-pdf-mcp/SKILL.md \
 從 ~/Documents/document.pdf 抽取第 1,3,5-10 頁到 ~/Documents/selected.pdf
 ```
 
+### OCR 掃描文件
+
+```
+使用 pdf_ocr_text 處理 ~/Documents/scanned.pdf，語言設為 ["en-US", "zh-Hant"]
+```
+
+### 轉換為 Markdown
+
+```
+將 ~/Documents/paper.pdf 轉換為 Markdown 格式
+```
+
+### 偵測 PDF 類型
+
+```
+偵測 ~/Documents/document.pdf 是文字型還是掃描型
+```
+
+### 旋轉頁面
+
+```
+將 ~/Documents/document.pdf 第 1-3 頁旋轉 90 度
+```
+
+### 分割 PDF
+
+```
+將 ~/Documents/book.pdf 分割為每頁一個檔案
+```
+
+### 加入浮水印
+
+```
+在 ~/Documents/report.pdf 加入 "CONFIDENTIAL" 浮水印
+```
+
+### 加密 PDF
+
+```
+使用密碼 "secret123" 加密 ~/Documents/sensitive.pdf
+```
+
 ## 技術細節
 
 ### 使用的 macOS 框架
 
 - **PDFKit**：核心 PDF 操作（讀取、寫入、合併、搜尋）
-- **Vision**：掃描件 OCR（Milestone B）
-- **CoreGraphics**：低階 PDF 存取、圖片提取
+- **Vision**：掃描件 OCR
+- **CoreGraphics**：低階 PDF 存取、圖片渲染
+- **AppKit**：圖片格式轉換
 
 ### 依賴
 
@@ -160,39 +243,17 @@ curl -o .claude/skills/che-pdf-mcp/SKILL.md \
 ## 與其他方案比較
 
 | 功能 | mcp-pdf-tools | MCP_PDF_Server | **che-pdf-mcp** |
-|------|---------------|----------------|-----------------|
+|------|---------------|----------------|--------------------|
 | 語言 | Rust | Python | **Swift** |
 | Runtime | 無 | Python | **無** |
-| OCR | 否 | 否 | **計劃中** |
+| OCR | 否 | 否 | **是 (Vision)** |
 | 合併 | 是 | 否 | **是** |
 | 抽頁 | 是 | 否 | **是** |
+| Markdown 輸出 | 否 | 否 | **是** |
+| 浮水印 | 否 | 否 | **是** |
+| 加密 | 否 | 否 | **是** |
+| URL 讀取 | 否 | 否 | **是** |
 | macOS 原生 | 否 | 否 | **是** |
-
-## 開發路線圖
-
-### Milestone A（MVP）- 目前
-
-- [x] 文件存取和資訊
-- [x] 文字提取
-- [x] 搜尋
-- [x] 合併
-- [x] 抽頁
-
-### Milestone B（RAG/文件理解）
-
-- [ ] Vision framework OCR
-- [ ] PDF 轉 Markdown
-- [ ] 大綱/目錄提取
-- [ ] 圖片提取
-- [ ] PDF 類型偵測（文字/掃描/混合）
-
-### Milestone C（進階功能）
-
-- [ ] 頁面旋轉
-- [ ] PDF 分割
-- [ ] 浮水印
-- [ ] 加密
-- [ ] URL 讀取
 
 ## 授權
 

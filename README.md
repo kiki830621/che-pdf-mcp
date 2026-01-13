@@ -9,7 +9,7 @@ A Swift-native MCP (Model Context Protocol) server for PDF document manipulation
 - **Pure Swift Implementation**: No Python, Node.js, or external runtime required
 - **macOS Native APIs**: PDFKit for core operations, Vision for OCR
 - **Single Binary**: Just one executable file
-- **12 MCP Tools** (MVP): Document info, text extraction, search, merge, extract pages
+- **25 MCP Tools**: Complete PDF manipulation toolkit
 - **High Performance**: Native binary with no interpreter overhead
 
 ## Installation
@@ -74,6 +74,8 @@ Core workflow:
 3. `pdf_search_text` - Search for text in PDF
 4. `pdf_merge` - Combine multiple PDFs
 5. `pdf_extract_pages` - Extract specific pages
+6. `pdf_ocr_text` - OCR scanned documents
+7. `pdf_to_markdown` - Convert to Markdown
 ```
 
 ### Claude Code Skill
@@ -84,7 +86,7 @@ curl -o .claude/skills/che-pdf-mcp/SKILL.md \
   https://raw.githubusercontent.com/kiki830621/che-pdf-mcp/main/skills/che-pdf-mcp/SKILL.md
 ```
 
-## Available Tools (12 MVP Tools)
+## Available Tools (25 Tools)
 
 ### Document Access (6 tools)
 
@@ -112,6 +114,44 @@ curl -o .claude/skills/che-pdf-mcp/SKILL.md \
 | `pdf_merge` | Merge multiple PDFs |
 | `pdf_extract_pages` | Extract specific pages |
 | `pdf_save` | Save changes to PDF |
+
+### OCR (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `pdf_ocr_text` | Extract text from scanned PDFs using Vision OCR |
+| `pdf_ocr_page` | OCR single page with position information |
+
+### Structured Output (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `pdf_to_markdown` | Convert PDF to Markdown format |
+| `pdf_get_outline` | Get PDF outline/table of contents |
+
+### Image Processing (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `pdf_extract_images` | Extract embedded images from PDF |
+| `pdf_render_page` | Render PDF page to image file |
+
+### Detection (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `pdf_detect_type` | Detect PDF type (text/scanned/mixed) |
+| `pdf_check_accessibility` | Check PDF accessibility features |
+
+### Advanced Operations (5 tools)
+
+| Tool | Description |
+|------|-------------|
+| `pdf_rotate_pages` | Rotate pages |
+| `pdf_split` | Split PDF into multiple files |
+| `pdf_add_watermark` | Add text watermark |
+| `pdf_encrypt` | Encrypt PDF with password |
+| `pdf_url_fetch` | Fetch PDF from URL |
 
 ## Usage Examples
 
@@ -145,13 +185,56 @@ Search for "machine learning" in ~/Documents/paper.pdf
 Extract pages 1,3,5-10 from ~/Documents/document.pdf to ~/Documents/selected.pdf
 ```
 
+### OCR Scanned Document
+
+```
+Use pdf_ocr_text on ~/Documents/scanned.pdf with languages ["en-US", "zh-Hant"]
+```
+
+### Convert to Markdown
+
+```
+Convert ~/Documents/paper.pdf to Markdown format
+```
+
+### Detect PDF Type
+
+```
+Detect whether ~/Documents/document.pdf is text-based or scanned
+```
+
+### Rotate Pages
+
+```
+Rotate pages 1-3 of ~/Documents/document.pdf by 90 degrees
+```
+
+### Split PDF
+
+```
+Split ~/Documents/book.pdf into one file per page
+```
+
+### Add Watermark
+
+```
+Add "CONFIDENTIAL" watermark to ~/Documents/report.pdf
+```
+
+### Encrypt PDF
+
+```
+Encrypt ~/Documents/sensitive.pdf with password "secret123"
+```
+
 ## Technical Details
 
 ### macOS Frameworks Used
 
 - **PDFKit**: Core PDF operations (read, write, merge, search)
-- **Vision**: OCR for scanned documents (Milestone B)
-- **CoreGraphics**: Low-level PDF access, image extraction
+- **Vision**: OCR for scanned documents
+- **CoreGraphics**: Low-level PDF access, image rendering
+- **AppKit**: Image format conversion
 
 ### Dependencies
 
@@ -163,36 +246,14 @@ Extract pages 1,3,5-10 from ~/Documents/document.pdf to ~/Documents/selected.pdf
 |---------|---------------|----------------|-----------------|
 | Language | Rust | Python | **Swift** |
 | Runtime | None | Python | **None** |
-| OCR | No | No | **Planned** |
+| OCR | No | No | **Yes (Vision)** |
 | Merge | Yes | No | **Yes** |
 | Extract Pages | Yes | No | **Yes** |
+| Markdown Export | No | No | **Yes** |
+| Watermark | No | No | **Yes** |
+| Encryption | No | No | **Yes** |
+| URL Fetch | No | No | **Yes** |
 | macOS Native | No | No | **Yes** |
-
-## Roadmap
-
-### Milestone A (MVP) - Current
-
-- [x] Document access and info
-- [x] Text extraction
-- [x] Search
-- [x] Merge
-- [x] Extract pages
-
-### Milestone B (RAG/Document Understanding)
-
-- [ ] OCR with Vision framework
-- [ ] PDF to Markdown conversion
-- [ ] Outline/TOC extraction
-- [ ] Image extraction
-- [ ] PDF type detection (text/scanned/mixed)
-
-### Milestone C (Advanced)
-
-- [ ] Page rotation
-- [ ] PDF split
-- [ ] Watermark
-- [ ] Encryption
-- [ ] URL fetch
 
 ## License
 

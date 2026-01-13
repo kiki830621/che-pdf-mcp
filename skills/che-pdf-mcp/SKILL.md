@@ -1,6 +1,6 @@
 # che-pdf-mcp
 
-A Swift-native MCP server for PDF document manipulation using macOS native frameworks. Provides tools for reading, extracting, searching, merging, and manipulating PDF files.
+A Swift-native MCP server for PDF document manipulation using macOS native frameworks. Provides 25 tools for reading, extracting, searching, merging, OCR, and manipulating PDF files.
 
 ## When to Use
 
@@ -11,7 +11,12 @@ Use `che-pdf-mcp` when you need to:
 - Search for specific text within PDFs
 - Merge multiple PDF files into one
 - Extract specific pages from a PDF
-- List PDF files in a directory
+- OCR scanned documents using Vision framework
+- Convert PDF to Markdown format
+- Extract or render images from PDFs
+- Detect PDF type (text-based, scanned, mixed)
+- Rotate, split, watermark, or encrypt PDFs
+- Fetch PDFs from URLs
 
 ## Core Workflows
 
@@ -32,6 +37,18 @@ Use `che-pdf-mcp` when you need to:
 
    pdf_extract_text(path: "...", start_page: 1, end_page: 5)
    → Returns text from pages 1-5
+```
+
+### OCR Scanned Documents
+
+```text
+1. pdf_ocr_text(path: "/path/to/scanned.pdf", languages: ["en-US", "zh-Hant"])
+   → Returns OCR-extracted text
+
+   OR for detailed layout:
+
+   pdf_ocr_page(path: "...", page: 1, languages: ["en-US"])
+   → Returns text blocks with position and confidence
 ```
 
 ### Search Text
@@ -62,6 +79,92 @@ Use `che-pdf-mcp` when you need to:
    → Creates PDF with specified pages
 ```
 
+### Convert to Markdown
+
+```text
+1. pdf_to_markdown(path: "/path/to/document.pdf")
+   → Returns Markdown with YAML frontmatter
+
+   OR save to file:
+
+   pdf_to_markdown(path: "...", output_path: "/path/to/output.md")
+```
+
+### Render Page to Image
+
+```text
+1. pdf_render_page(
+     path: "/path/to/document.pdf",
+     page: 1,
+     output_path: "/path/to/page1.png",
+     dpi: 300
+   )
+   → Renders page as PNG image
+```
+
+### Detect PDF Type
+
+```text
+1. pdf_detect_type(path: "/path/to/document.pdf")
+   → Returns type analysis (text-based, scanned, mixed)
+   → Recommends appropriate extraction method
+```
+
+### Rotate Pages
+
+```text
+1. pdf_rotate_pages(
+     path: "/path/to/source.pdf",
+     pages: "1-3",
+     angle: 90,
+     output_path: "/path/to/rotated.pdf"
+   )
+   → Rotates specified pages
+```
+
+### Split PDF
+
+```text
+1. pdf_split(
+     path: "/path/to/source.pdf",
+     split_method: "each",  # or "count:5" or "ranges:1-3,4-6"
+     output_directory: "/path/to/output"
+   )
+   → Creates multiple PDF files
+```
+
+### Add Watermark
+
+```text
+1. pdf_add_watermark(
+     path: "/path/to/source.pdf",
+     text: "CONFIDENTIAL",
+     output_path: "/path/to/watermarked.pdf"
+   )
+   → Adds text watermark to all pages
+```
+
+### Encrypt PDF
+
+```text
+1. pdf_encrypt(
+     path: "/path/to/source.pdf",
+     user_password: "secret123",
+     output_path: "/path/to/encrypted.pdf"
+   )
+   → Creates password-protected PDF
+```
+
+### Fetch from URL
+
+```text
+1. pdf_url_fetch(
+     url: "https://example.com/document.pdf",
+     save_path: "/path/to/local.pdf"
+   )
+   → Downloads and opens PDF from URL
+```
+
 ### Session-based Operations
 
 ```text
@@ -70,6 +173,7 @@ Use `che-pdf-mcp` when you need to:
 
 2. pdf_extract_text(doc_id: "...")
    pdf_search_text(doc_id: "...", query: "...")
+   pdf_ocr_text(doc_id: "...")
 
 3. pdf_close(doc_id: "...")
    → Clean up when done
@@ -77,7 +181,7 @@ Use `che-pdf-mcp` when you need to:
 
 ## Tool Reference
 
-### Document Access
+### Document Access (6 tools)
 
 - `pdf_info` - Get PDF metadata (pages, version, author, title, etc.)
 - `pdf_list` - List PDF files in a directory
@@ -86,17 +190,45 @@ Use `che-pdf-mcp` when you need to:
 - `pdf_list_open` - List all currently open documents
 - `pdf_page_count` - Get number of pages
 
-### Text Operations
+### Text Operations (3 tools)
 
 - `pdf_extract_text` - Extract plain text (with optional page range)
 - `pdf_search_text` - Search for text with context
 - `pdf_extract_text_with_layout` - Get text with position information
 
-### Document Operations
+### Document Operations (3 tools)
 
 - `pdf_merge` - Combine multiple PDFs into one
 - `pdf_extract_pages` - Extract specific pages (supports "1,3,5-10" format)
 - `pdf_save` - Save changes to an open document
+
+### OCR (2 tools)
+
+- `pdf_ocr_text` - Extract text from scanned PDFs using Vision OCR
+- `pdf_ocr_page` - OCR single page with position and confidence info
+
+### Structured Output (2 tools)
+
+- `pdf_to_markdown` - Convert PDF to Markdown format
+- `pdf_get_outline` - Get PDF outline/table of contents
+
+### Image Processing (2 tools)
+
+- `pdf_extract_images` - Extract embedded images from PDF
+- `pdf_render_page` - Render PDF page to image file (PNG/JPG)
+
+### Detection (2 tools)
+
+- `pdf_detect_type` - Detect PDF type (text/scanned/mixed)
+- `pdf_check_accessibility` - Check accessibility features
+
+### Advanced Operations (5 tools)
+
+- `pdf_rotate_pages` - Rotate pages (90, 180, 270 degrees)
+- `pdf_split` - Split PDF into multiple files
+- `pdf_add_watermark` - Add text watermark
+- `pdf_encrypt` - Password-protect PDF
+- `pdf_url_fetch` - Fetch PDF from URL
 
 ## Tips
 
@@ -110,14 +242,22 @@ Use `che-pdf-mcp` when you need to:
 
 5. **Merge order matters**: Files are merged in the order provided in the `paths` array.
 
+6. **OCR languages**: Use Vision-supported language codes like "en-US", "zh-Hant", "ja", "ko".
+
+7. **PDF type detection**: Use `pdf_detect_type` first to determine if OCR is needed.
+
+8. **DPI for rendering**: Default is 150 DPI; use 300 for print quality.
+
 ## Examples
 
 ### Analyze a Research Paper
 
 ```text
 Get info about ~/Documents/paper.pdf
-Extract text from pages 1-3 (abstract and introduction)
+Detect if it's text-based or scanned
+Extract text (or use OCR if scanned)
 Search for "methodology" to find relevant sections
+Convert to Markdown for easier reading
 ```
 
 ### Combine Reports
@@ -131,16 +271,26 @@ Merge quarterly reports:
 into ~/Reports/annual-report.pdf
 ```
 
-### Extract Specific Content
+### Process Scanned Document
 
 ```text
-Extract the table of contents and first chapter (pages 1-20)
-from ~/Books/textbook.pdf to ~/Excerpts/chapter1.pdf
+Detect type of ~/Documents/old_scan.pdf
+If scanned, use pdf_ocr_text with appropriate languages
+Convert to Markdown for text processing
 ```
 
-### Find Information
+### Secure a Document
 
 ```text
-Search for "budget" in ~/Documents/proposal.pdf
-to find all mentions of budget-related content
+Add "CONFIDENTIAL" watermark to ~/Documents/sensitive.pdf
+Encrypt with password protection
+Save to ~/Documents/secured.pdf
+```
+
+### Extract Chapter
+
+```text
+Get outline of ~/Books/textbook.pdf
+Extract pages 50-80 (Chapter 3)
+Save as ~/Excerpts/chapter3.pdf
 ```

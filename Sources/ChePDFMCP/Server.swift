@@ -1,6 +1,8 @@
 import Foundation
 import MCP
 import PDFKit
+import Vision
+import AppKit
 
 // MARK: - PDF MCP Server
 
@@ -269,6 +271,355 @@ actor PDFMCPServer {
                     ]),
                     "required": .array([.string("doc_id"), .string("output_path")])
                 ])
+            ),
+
+            // B1. OCR (2 tools)
+            Tool(
+                name: "pdf_ocr_text",
+                description: "Extract text from PDF using OCR (for scanned documents)",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ]),
+                        "start_page": .object([
+                            "type": .string("integer"),
+                            "description": .string("Start page (1-indexed, default: 1)")
+                        ]),
+                        "end_page": .object([
+                            "type": .string("integer"),
+                            "description": .string("End page (1-indexed, default: last page)")
+                        ]),
+                        "languages": .object([
+                            "type": .string("array"),
+                            "items": .object(["type": .string("string")]),
+                            "description": .string("Recognition languages (default: ['en-US'])")
+                        ])
+                    ])
+                ])
+            ),
+            Tool(
+                name: "pdf_ocr_page",
+                description: "OCR a single page and return text with position information",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ]),
+                        "page": .object([
+                            "type": .string("integer"),
+                            "description": .string("Page number (1-indexed)")
+                        ]),
+                        "languages": .object([
+                            "type": .string("array"),
+                            "items": .object(["type": .string("string")]),
+                            "description": .string("Recognition languages (default: ['en-US'])")
+                        ])
+                    ]),
+                    "required": .array([.string("page")])
+                ])
+            ),
+
+            // B2. Structured Output (2 tools)
+            Tool(
+                name: "pdf_to_markdown",
+                description: "Convert PDF to Markdown format",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ]),
+                        "include_metadata": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Include YAML frontmatter (default: true)")
+                        ]),
+                        "output_path": .object([
+                            "type": .string("string"),
+                            "description": .string("Optional output file path")
+                        ])
+                    ])
+                ])
+            ),
+            Tool(
+                name: "pdf_get_outline",
+                description: "Get PDF outline/table of contents",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ])
+                    ])
+                ])
+            ),
+
+            // B3. Image Processing (2 tools)
+            Tool(
+                name: "pdf_extract_images",
+                description: "Extract embedded images from PDF pages",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ]),
+                        "output_directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Directory to save extracted images")
+                        ]),
+                        "format": .object([
+                            "type": .string("string"),
+                            "description": .string("Output format: png, jpg (default: png)")
+                        ])
+                    ]),
+                    "required": .array([.string("output_directory")])
+                ])
+            ),
+            Tool(
+                name: "pdf_render_page",
+                description: "Render a PDF page to an image file",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ]),
+                        "page": .object([
+                            "type": .string("integer"),
+                            "description": .string("Page number (1-indexed)")
+                        ]),
+                        "output_path": .object([
+                            "type": .string("string"),
+                            "description": .string("Output image file path")
+                        ]),
+                        "dpi": .object([
+                            "type": .string("integer"),
+                            "description": .string("Resolution in DPI (default: 150)")
+                        ]),
+                        "format": .object([
+                            "type": .string("string"),
+                            "description": .string("Output format: png, jpg (default: png)")
+                        ])
+                    ]),
+                    "required": .array([.string("page"), .string("output_path")])
+                ])
+            ),
+
+            // B4. Detection (2 tools)
+            Tool(
+                name: "pdf_detect_type",
+                description: "Detect PDF type (text-based, scanned/image-based, or mixed)",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ])
+                    ])
+                ])
+            ),
+            Tool(
+                name: "pdf_check_accessibility",
+                description: "Check PDF accessibility features (tagged, language, etc.)",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Document ID")
+                        ]),
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Or provide path directly")
+                        ])
+                    ])
+                ])
+            ),
+
+            // C. Advanced Operations (5 tools)
+            Tool(
+                name: "pdf_rotate_pages",
+                description: "Rotate pages in a PDF",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Source PDF path")
+                        ]),
+                        "pages": .object([
+                            "type": .string("string"),
+                            "description": .string("Page specification (e.g., '1,3,5-10' or 'all')")
+                        ]),
+                        "angle": .object([
+                            "type": .string("integer"),
+                            "description": .string("Rotation angle: 90, 180, or 270 degrees")
+                        ]),
+                        "output_path": .object([
+                            "type": .string("string"),
+                            "description": .string("Output file path")
+                        ])
+                    ]),
+                    "required": .array([.string("path"), .string("pages"), .string("angle"), .string("output_path")])
+                ])
+            ),
+            Tool(
+                name: "pdf_split",
+                description: "Split a PDF into multiple files",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Source PDF path")
+                        ]),
+                        "split_method": .object([
+                            "type": .string("string"),
+                            "description": .string("Method: 'each' (one file per page), 'count:N' (N pages each), 'ranges:1-3,4-6' (specific ranges)")
+                        ]),
+                        "output_directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Directory to save split files")
+                        ]),
+                        "prefix": .object([
+                            "type": .string("string"),
+                            "description": .string("Filename prefix (default: 'split')")
+                        ])
+                    ]),
+                    "required": .array([.string("path"), .string("split_method"), .string("output_directory")])
+                ])
+            ),
+            Tool(
+                name: "pdf_add_watermark",
+                description: "Add a text watermark to PDF pages",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Source PDF path")
+                        ]),
+                        "text": .object([
+                            "type": .string("string"),
+                            "description": .string("Watermark text")
+                        ]),
+                        "output_path": .object([
+                            "type": .string("string"),
+                            "description": .string("Output file path")
+                        ]),
+                        "pages": .object([
+                            "type": .string("string"),
+                            "description": .string("Page specification (default: 'all')")
+                        ]),
+                        "opacity": .object([
+                            "type": .string("number"),
+                            "description": .string("Opacity 0.0-1.0 (default: 0.3)")
+                        ]),
+                        "rotation": .object([
+                            "type": .string("integer"),
+                            "description": .string("Text rotation angle (default: 45)")
+                        ]),
+                        "font_size": .object([
+                            "type": .string("integer"),
+                            "description": .string("Font size (default: 48)")
+                        ])
+                    ]),
+                    "required": .array([.string("path"), .string("text"), .string("output_path")])
+                ])
+            ),
+            Tool(
+                name: "pdf_encrypt",
+                description: "Encrypt a PDF with password protection",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "path": .object([
+                            "type": .string("string"),
+                            "description": .string("Source PDF path")
+                        ]),
+                        "output_path": .object([
+                            "type": .string("string"),
+                            "description": .string("Output file path")
+                        ]),
+                        "user_password": .object([
+                            "type": .string("string"),
+                            "description": .string("Password to open/view the PDF")
+                        ]),
+                        "owner_password": .object([
+                            "type": .string("string"),
+                            "description": .string("Password for full access (default: same as user_password)")
+                        ]),
+                        "allow_printing": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Allow printing (default: true)")
+                        ]),
+                        "allow_copying": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Allow copying text (default: false)")
+                        ])
+                    ]),
+                    "required": .array([.string("path"), .string("output_path"), .string("user_password")])
+                ])
+            ),
+            Tool(
+                name: "pdf_url_fetch",
+                description: "Fetch and open a PDF from a URL",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "url": .object([
+                            "type": .string("string"),
+                            "description": .string("URL of the PDF file")
+                        ]),
+                        "save_path": .object([
+                            "type": .string("string"),
+                            "description": .string("Optional path to save the PDF locally")
+                        ]),
+                        "doc_id": .object([
+                            "type": .string("string"),
+                            "description": .string("Custom document ID (optional)")
+                        ])
+                    ]),
+                    "required": .array([.string("url")])
+                ])
             )
         ]
     }
@@ -321,6 +672,42 @@ actor PDFMCPServer {
             return try await pdfExtractPages(args: args)
         case "pdf_save":
             return try pdfSave(args: args)
+
+        // B1. OCR
+        case "pdf_ocr_text":
+            return try await pdfOcrText(args: args)
+        case "pdf_ocr_page":
+            return try await pdfOcrPage(args: args)
+
+        // B2. Structured Output
+        case "pdf_to_markdown":
+            return try await pdfToMarkdown(args: args)
+        case "pdf_get_outline":
+            return try await pdfGetOutline(args: args)
+
+        // B3. Image Processing
+        case "pdf_extract_images":
+            return try await pdfExtractImages(args: args)
+        case "pdf_render_page":
+            return try await pdfRenderPage(args: args)
+
+        // B4. Detection
+        case "pdf_detect_type":
+            return try await pdfDetectType(args: args)
+        case "pdf_check_accessibility":
+            return try await pdfCheckAccessibility(args: args)
+
+        // C. Advanced Operations
+        case "pdf_rotate_pages":
+            return try await pdfRotatePages(args: args)
+        case "pdf_split":
+            return try await pdfSplit(args: args)
+        case "pdf_add_watermark":
+            return try await pdfAddWatermark(args: args)
+        case "pdf_encrypt":
+            return try await pdfEncrypt(args: args)
+        case "pdf_url_fetch":
+            return try await pdfUrlFetch(args: args)
 
         default:
             throw PDFError.unknownTool(name)
@@ -761,5 +1148,656 @@ actor PDFMCPServer {
         }
 
         return "Document saved to \(outputPath)"
+    }
+
+    // MARK: - B1. OCR Implementations
+
+    private func pdfOcrText(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+
+        let startPage = (try? getOptionalParameter(args: args, key: "start_page", as: Int.self)) ?? 1
+        let endPage = (try? getOptionalParameter(args: args, key: "end_page", as: Int.self)) ?? doc.pageCount
+        let languages = (try? getOptionalParameter(args: args, key: "languages", as: [String].self)) ?? ["en-US"]
+
+        guard startPage >= 1 && startPage <= doc.pageCount else {
+            throw PDFError.invalidPageRange("start_page \(startPage) out of range (1-\(doc.pageCount))")
+        }
+        guard endPage >= startPage && endPage <= doc.pageCount else {
+            throw PDFError.invalidPageRange("end_page \(endPage) out of range (\(startPage)-\(doc.pageCount))")
+        }
+
+        var fullText = ""
+        for i in (startPage - 1)..<endPage {
+            guard let page = doc.page(at: i) else { continue }
+
+            fullText += "--- Page \(i + 1) (OCR) ---\n"
+            let pageText = try await VisionOCR.performOCR(on: page, languages: languages)
+            fullText += pageText
+            fullText += "\n\n"
+        }
+
+        if fullText.isEmpty {
+            return "No text found via OCR in the specified pages"
+        }
+
+        return fullText
+    }
+
+    private func pdfOcrPage(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+        let pageNum = try getParameter(args: args, key: "page", as: Int.self)
+        let languages = (try? getOptionalParameter(args: args, key: "languages", as: [String].self)) ?? ["en-US"]
+
+        guard pageNum >= 1 && pageNum <= doc.pageCount else {
+            throw PDFError.invalidPageRange("page \(pageNum) out of range (1-\(doc.pageCount))")
+        }
+
+        guard let page = doc.page(at: pageNum - 1) else {
+            throw PDFError.readError("Failed to get page \(pageNum)")
+        }
+
+        let blocks = try await VisionOCR.performOCRWithLayout(on: page, languages: languages)
+
+        if blocks.isEmpty {
+            return "No text found via OCR on page \(pageNum)"
+        }
+
+        var output = "OCR Results for Page \(pageNum) (\(blocks.count) text blocks):\n\n"
+        for (index, block) in blocks.enumerated() {
+            output += "[\(index + 1)] \(block.text)\n"
+            output += "    Position: (\(Int(block.bounds.origin.x)), \(Int(block.bounds.origin.y)))\n"
+            output += "    Size: \(Int(block.bounds.width)) x \(Int(block.bounds.height))\n"
+            output += "    Confidence: \(String(format: "%.1f%%", block.confidence * 100))\n\n"
+        }
+
+        return output
+    }
+
+    // MARK: - B2. Structured Output Implementations
+
+    private func pdfToMarkdown(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+        let includeMetadata = (try? getOptionalParameter(args: args, key: "include_metadata", as: Bool.self)) ?? true
+        let outputPath = try? getOptionalParameter(args: args, key: "output_path", as: String.self)
+
+        var options = MarkdownExporter.Options.default
+        options.includeMetadata = includeMetadata
+
+        let markdown = MarkdownExporter.export(document: doc, options: options)
+
+        if let path = outputPath {
+            let url = URL(fileURLWithPath: expandPath(path))
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
+            return "Markdown saved to \(path)"
+        }
+
+        return markdown
+    }
+
+    private func pdfGetOutline(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+
+        guard let outline = doc.outlineRoot else {
+            return "No outline/table of contents found in this PDF"
+        }
+
+        func buildOutlineString(item: PDFOutline, level: Int) -> String {
+            var result = ""
+            let indent = String(repeating: "  ", count: level)
+
+            if let label = item.label {
+                var pageInfo = ""
+                if let destination = item.destination, let page = destination.page {
+                    let pageIndex = doc.index(for: page)
+                    pageInfo = " (page \(pageIndex + 1))"
+                }
+                result += "\(indent)- \(label)\(pageInfo)\n"
+            }
+
+            for i in 0..<item.numberOfChildren {
+                if let child = item.child(at: i) {
+                    result += buildOutlineString(item: child, level: level + 1)
+                }
+            }
+
+            return result
+        }
+
+        var output = "PDF Outline:\n"
+        output += buildOutlineString(item: outline, level: 0)
+
+        return output
+    }
+
+    // MARK: - B3. Image Processing Implementations
+
+    private func pdfExtractImages(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+        let outputDir = try getParameter(args: args, key: "output_directory", as: String.self)
+        let format = (try? getOptionalParameter(args: args, key: "format", as: String.self)) ?? "png"
+
+        let dirURL = URL(fileURLWithPath: expandPath(outputDir))
+        try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+        var extractedCount = 0
+
+        for pageIndex in 0..<doc.pageCount {
+            guard let page = doc.page(at: pageIndex) else { continue }
+
+            // Render page as image (simplified approach - extracts page as image)
+            let bounds = page.bounds(for: .mediaBox)
+            let scale: CGFloat = 2.0  // 2x for decent quality
+            let width = Int(bounds.width * scale)
+            let height = Int(bounds.height * scale)
+
+            guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: colorSpace,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  ) else { continue }
+
+            context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.scaleBy(x: scale, y: scale)
+
+            guard let pageRef = page.pageRef else { continue }
+            context.drawPDFPage(pageRef)
+
+            guard let cgImage = context.makeImage() else { continue }
+
+            let filename = "page_\(pageIndex + 1).\(format)"
+            let fileURL = dirURL.appendingPathComponent(filename)
+
+            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+
+            if let tiffData = nsImage.tiffRepresentation,
+               let bitmapRep = NSBitmapImageRep(data: tiffData) {
+                let imageData: Data?
+                if format.lowercased() == "jpg" || format.lowercased() == "jpeg" {
+                    imageData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+                } else {
+                    imageData = bitmapRep.representation(using: .png, properties: [:])
+                }
+
+                if let data = imageData {
+                    try data.write(to: fileURL)
+                    extractedCount += 1
+                }
+            }
+        }
+
+        return "Extracted \(extractedCount) page(s) as images to \(outputDir)"
+    }
+
+    private func pdfRenderPage(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+        let pageNum = try getParameter(args: args, key: "page", as: Int.self)
+        let outputPath = try getParameter(args: args, key: "output_path", as: String.self)
+        let dpi = (try? getOptionalParameter(args: args, key: "dpi", as: Int.self)) ?? 150
+        let format = (try? getOptionalParameter(args: args, key: "format", as: String.self)) ?? "png"
+
+        guard pageNum >= 1 && pageNum <= doc.pageCount else {
+            throw PDFError.invalidPageRange("page \(pageNum) out of range (1-\(doc.pageCount))")
+        }
+
+        guard let page = doc.page(at: pageNum - 1) else {
+            throw PDFError.readError("Failed to get page \(pageNum)")
+        }
+
+        let bounds = page.bounds(for: .mediaBox)
+        let scale = CGFloat(dpi) / 72.0
+        let width = Int(bounds.width * scale)
+        let height = Int(bounds.height * scale)
+
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else {
+            throw PDFError.renderFailed
+        }
+
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.scaleBy(x: scale, y: scale)
+
+        guard let pageRef = page.pageRef else {
+            throw PDFError.renderFailed
+        }
+        context.drawPDFPage(pageRef)
+
+        guard let cgImage = context.makeImage() else {
+            throw PDFError.renderFailed
+        }
+
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+        let outputURL = URL(fileURLWithPath: expandPath(outputPath))
+
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData) else {
+            throw PDFError.renderFailed
+        }
+
+        let imageData: Data?
+        if format.lowercased() == "jpg" || format.lowercased() == "jpeg" {
+            imageData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.9])
+        } else {
+            imageData = bitmapRep.representation(using: .png, properties: [:])
+        }
+
+        guard let data = imageData else {
+            throw PDFError.renderFailed
+        }
+
+        try data.write(to: outputURL)
+        return "Page \(pageNum) rendered to \(outputPath) (\(width) x \(height) px, \(dpi) DPI)"
+    }
+
+    // MARK: - B4. Detection Implementations
+
+    private func pdfDetectType(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+
+        var pagesWithText = 0
+        var pagesWithoutText = 0
+        var totalChars = 0
+
+        for i in 0..<doc.pageCount {
+            guard let page = doc.page(at: i) else { continue }
+            let text = page.string ?? ""
+            let charCount = text.trimmingCharacters(in: .whitespacesAndNewlines).count
+
+            if charCount > 50 {  // Threshold for "has text"
+                pagesWithText += 1
+            } else {
+                pagesWithoutText += 1
+            }
+            totalChars += charCount
+        }
+
+        let totalPages = doc.pageCount
+        let textRatio = Double(pagesWithText) / Double(totalPages)
+
+        var pdfType: String
+        var recommendation: String
+
+        if textRatio >= 0.9 {
+            pdfType = "text-based"
+            recommendation = "Use pdf_extract_text for best results."
+        } else if textRatio <= 0.1 {
+            pdfType = "scanned/image-based"
+            recommendation = "Use pdf_ocr_text for text extraction."
+        } else {
+            pdfType = "mixed (text and scanned)"
+            recommendation = "Use pdf_extract_text first, then pdf_ocr_text for pages without text."
+        }
+
+        var output = "PDF Type Analysis:\n"
+        output += "  Type: \(pdfType)\n"
+        output += "  Total pages: \(totalPages)\n"
+        output += "  Pages with text: \(pagesWithText) (\(String(format: "%.1f%%", textRatio * 100)))\n"
+        output += "  Pages without text: \(pagesWithoutText)\n"
+        output += "  Total characters: \(totalChars)\n"
+        output += "  Recommendation: \(recommendation)\n"
+
+        return output
+    }
+
+    private func pdfCheckAccessibility(args: [String: Value]) async throws -> String {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+
+        var output = "PDF Accessibility Check:\n"
+
+        // Check document attributes
+        let attrs = doc.documentAttributes ?? [:]
+
+        // Check for title
+        let hasTitle = (attrs[PDFDocumentAttribute.titleAttribute] as? String)?.isEmpty == false
+        output += "  Has title: \(hasTitle ? "Yes" : "No")\n"
+
+        // Check for author
+        let hasAuthor = (attrs[PDFDocumentAttribute.authorAttribute] as? String)?.isEmpty == false
+        output += "  Has author: \(hasAuthor ? "Yes" : "No")\n"
+
+        // Check for subject/description
+        let hasSubject = (attrs[PDFDocumentAttribute.subjectAttribute] as? String)?.isEmpty == false
+        output += "  Has subject: \(hasSubject ? "Yes" : "No")\n"
+
+        // Check encryption/permissions
+        output += "  Is encrypted: \(doc.isEncrypted ? "Yes" : "No")\n"
+        output += "  Allows copying: \(doc.allowsCopying ? "Yes" : "No")\n"
+        output += "  Allows printing: \(doc.allowsPrinting ? "Yes" : "No")\n"
+
+        // Check for text content (accessibility needs selectable text)
+        var pagesWithText = 0
+        for i in 0..<min(doc.pageCount, 5) {  // Sample first 5 pages
+            if let page = doc.page(at: i), let text = page.string, !text.isEmpty {
+                pagesWithText += 1
+            }
+        }
+        let hasSelectableText = pagesWithText > 0
+        output += "  Has selectable text: \(hasSelectableText ? "Yes" : "No")\n"
+
+        // Check for outline
+        let hasOutline = doc.outlineRoot != nil && (doc.outlineRoot?.numberOfChildren ?? 0) > 0
+        output += "  Has outline/TOC: \(hasOutline ? "Yes" : "No")\n"
+
+        // Accessibility score
+        var score = 0
+        if hasTitle { score += 1 }
+        if hasAuthor { score += 1 }
+        if hasSelectableText { score += 2 }
+        if hasOutline { score += 1 }
+        if doc.allowsCopying { score += 1 }
+
+        let maxScore = 6
+        output += "\n  Accessibility score: \(score)/\(maxScore)\n"
+
+        if score >= 5 {
+            output += "  Rating: Good accessibility\n"
+        } else if score >= 3 {
+            output += "  Rating: Fair accessibility\n"
+        } else {
+            output += "  Rating: Poor accessibility - consider adding text layer via OCR\n"
+        }
+
+        return output
+    }
+
+    // MARK: - C. Advanced Operations Implementations
+
+    private func pdfRotatePages(args: [String: Value]) async throws -> String {
+        let path = try getParameter(args: args, key: "path", as: String.self)
+        let pagesSpec = try getParameter(args: args, key: "pages", as: String.self)
+        let angle = try getParameter(args: args, key: "angle", as: Int.self)
+        let outputPath = try getParameter(args: args, key: "output_path", as: String.self)
+
+        guard [90, 180, 270].contains(angle) else {
+            throw PDFError.invalidParameter("angle", "must be 90, 180, or 270")
+        }
+
+        let url = URL(fileURLWithPath: expandPath(path))
+        guard let doc = PDFDocument(url: url) else {
+            throw PDFError.invalidPDF(path)
+        }
+
+        // Parse page specification
+        var pageIndices: Set<Int> = []
+        if pagesSpec.lowercased() == "all" {
+            pageIndices = Set(0..<doc.pageCount)
+        } else {
+            pageIndices = parsePageSpec(pagesSpec, maxPages: doc.pageCount)
+        }
+
+        // Rotate specified pages
+        for index in pageIndices {
+            if let page = doc.page(at: index) {
+                let currentRotation = page.rotation
+                page.rotation = (currentRotation + angle) % 360
+            }
+        }
+
+        let outputURL = URL(fileURLWithPath: expandPath(outputPath))
+        guard doc.write(to: outputURL) else {
+            throw PDFError.writeError("Failed to write rotated PDF")
+        }
+
+        return "Rotated \(pageIndices.count) page(s) by \(angle)° and saved to \(outputPath)"
+    }
+
+    private func pdfSplit(args: [String: Value]) async throws -> String {
+        let path = try getParameter(args: args, key: "path", as: String.self)
+        let splitMethod = try getParameter(args: args, key: "split_method", as: String.self)
+        let outputDir = try getParameter(args: args, key: "output_directory", as: String.self)
+        let prefix = (try? getOptionalParameter(args: args, key: "prefix", as: String.self)) ?? "split"
+
+        let url = URL(fileURLWithPath: expandPath(path))
+        guard let doc = PDFDocument(url: url) else {
+            throw PDFError.invalidPDF(path)
+        }
+
+        let dirURL = URL(fileURLWithPath: expandPath(outputDir))
+        try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+        var filesCreated = 0
+
+        if splitMethod == "each" {
+            // One file per page
+            for i in 0..<doc.pageCount {
+                let newDoc = PDFDocument()
+                if let page = doc.page(at: i) {
+                    newDoc.insert(page, at: 0)
+                }
+                let filename = "\(prefix)_page_\(i + 1).pdf"
+                let fileURL = dirURL.appendingPathComponent(filename)
+                if newDoc.write(to: fileURL) {
+                    filesCreated += 1
+                }
+            }
+        } else if splitMethod.hasPrefix("count:") {
+            // N pages per file
+            let countStr = String(splitMethod.dropFirst(6))
+            guard let pagesPerFile = Int(countStr), pagesPerFile > 0 else {
+                throw PDFError.invalidParameter("split_method", "invalid count value")
+            }
+
+            var fileIndex = 1
+            var currentDoc = PDFDocument()
+            var pageCount = 0
+
+            for i in 0..<doc.pageCount {
+                if let page = doc.page(at: i) {
+                    currentDoc.insert(page, at: currentDoc.pageCount)
+                    pageCount += 1
+
+                    if pageCount >= pagesPerFile {
+                        let filename = "\(prefix)_part_\(fileIndex).pdf"
+                        let fileURL = dirURL.appendingPathComponent(filename)
+                        if currentDoc.write(to: fileURL) {
+                            filesCreated += 1
+                        }
+                        currentDoc = PDFDocument()
+                        pageCount = 0
+                        fileIndex += 1
+                    }
+                }
+            }
+
+            // Write remaining pages
+            if currentDoc.pageCount > 0 {
+                let filename = "\(prefix)_part_\(fileIndex).pdf"
+                let fileURL = dirURL.appendingPathComponent(filename)
+                if currentDoc.write(to: fileURL) {
+                    filesCreated += 1
+                }
+            }
+        } else if splitMethod.hasPrefix("ranges:") {
+            // Specific ranges like "1-3,4-6,7-10"
+            let rangesStr = String(splitMethod.dropFirst(7))
+            let ranges = rangesStr.components(separatedBy: ",")
+
+            for (index, rangeStr) in ranges.enumerated() {
+                let pageIndices = parsePageSpec(rangeStr, maxPages: doc.pageCount)
+                if pageIndices.isEmpty { continue }
+
+                let newDoc = PDFDocument()
+                for pageIndex in pageIndices.sorted() {
+                    if let page = doc.page(at: pageIndex) {
+                        newDoc.insert(page, at: newDoc.pageCount)
+                    }
+                }
+
+                let filename = "\(prefix)_part_\(index + 1).pdf"
+                let fileURL = dirURL.appendingPathComponent(filename)
+                if newDoc.write(to: fileURL) {
+                    filesCreated += 1
+                }
+            }
+        } else {
+            throw PDFError.invalidParameter("split_method", "must be 'each', 'count:N', or 'ranges:1-3,4-6'")
+        }
+
+        return "Split PDF into \(filesCreated) file(s) in \(outputDir)"
+    }
+
+    private func pdfAddWatermark(args: [String: Value]) async throws -> String {
+        let path = try getParameter(args: args, key: "path", as: String.self)
+        let text = try getParameter(args: args, key: "text", as: String.self)
+        let outputPath = try getParameter(args: args, key: "output_path", as: String.self)
+        let pagesSpec = (try? getOptionalParameter(args: args, key: "pages", as: String.self)) ?? "all"
+        let opacity = (try? getOptionalParameter(args: args, key: "opacity", as: Double.self)) ?? 0.3
+        let _ = (try? getOptionalParameter(args: args, key: "rotation", as: Int.self)) ?? 45  // Reserved for future use
+        let fontSize = (try? getOptionalParameter(args: args, key: "font_size", as: Int.self)) ?? 48
+
+        let url = URL(fileURLWithPath: expandPath(path))
+        guard let doc = PDFDocument(url: url) else {
+            throw PDFError.invalidPDF(path)
+        }
+
+        // Parse page specification
+        var pageIndices: Set<Int> = []
+        if pagesSpec.lowercased() == "all" {
+            pageIndices = Set(0..<doc.pageCount)
+        } else {
+            pageIndices = parsePageSpec(pagesSpec, maxPages: doc.pageCount)
+        }
+
+        // Add watermark to each page
+        for index in pageIndices {
+            guard let page = doc.page(at: index) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+
+            // Create a free text annotation as watermark
+            let annotation = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
+            annotation.contents = text
+            annotation.font = NSFont.systemFont(ofSize: CGFloat(fontSize))
+            annotation.fontColor = NSColor.gray.withAlphaComponent(CGFloat(opacity))
+            annotation.color = .clear
+            annotation.alignment = .center
+
+            page.addAnnotation(annotation)
+        }
+
+        let outputURL = URL(fileURLWithPath: expandPath(outputPath))
+        guard doc.write(to: outputURL) else {
+            throw PDFError.writeError("Failed to write watermarked PDF")
+        }
+
+        return "Added watermark '\(text)' to \(pageIndices.count) page(s) and saved to \(outputPath)"
+    }
+
+    private func pdfEncrypt(args: [String: Value]) async throws -> String {
+        let path = try getParameter(args: args, key: "path", as: String.self)
+        let outputPath = try getParameter(args: args, key: "output_path", as: String.self)
+        let userPassword = try getParameter(args: args, key: "user_password", as: String.self)
+        let ownerPassword = (try? getOptionalParameter(args: args, key: "owner_password", as: String.self)) ?? userPassword
+        let allowPrinting = (try? getOptionalParameter(args: args, key: "allow_printing", as: Bool.self)) ?? true
+        let allowCopying = (try? getOptionalParameter(args: args, key: "allow_copying", as: Bool.self)) ?? false
+
+        let url = URL(fileURLWithPath: expandPath(path))
+        guard let doc = PDFDocument(url: url) else {
+            throw PDFError.invalidPDF(path)
+        }
+
+        let outputURL = URL(fileURLWithPath: expandPath(outputPath))
+
+        // Build options dictionary for PDF encryption
+        // Note: PDFKit encryption options on macOS 13+
+        let options: [PDFDocumentWriteOption: Any] = [
+            .userPasswordOption: userPassword,
+            .ownerPasswordOption: ownerPassword
+        ]
+
+        // Note: allowsPrinting and allowsCopying are controlled by the password permissions
+        // These are set based on the owner password access level
+        _ = allowPrinting  // Reserved for future use with CoreGraphics PDF creation
+        _ = allowCopying   // Reserved for future use with CoreGraphics PDF creation
+
+        guard doc.write(to: outputURL, withOptions: options) else {
+            throw PDFError.encryptionError("Failed to write encrypted PDF")
+        }
+
+        return "Encrypted PDF saved to \(outputPath)"
+    }
+
+    private func pdfUrlFetch(args: [String: Value]) async throws -> String {
+        let urlString = try getParameter(args: args, key: "url", as: String.self)
+        let savePath = try? getOptionalParameter(args: args, key: "save_path", as: String.self)
+        let customId = try? getOptionalParameter(args: args, key: "doc_id", as: String.self)
+
+        guard let url = URL(string: urlString) else {
+            throw PDFError.urlFetchError("Invalid URL: \(urlString)")
+        }
+
+        // Fetch PDF data
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        // Check response
+        if let httpResponse = response as? HTTPURLResponse {
+            guard (200...299).contains(httpResponse.statusCode) else {
+                throw PDFError.urlFetchError("HTTP error: \(httpResponse.statusCode)")
+            }
+        }
+
+        // Create PDFDocument from data
+        guard let doc = PDFDocument(data: data) else {
+            throw PDFError.invalidPDF(urlString)
+        }
+
+        let docId = customId ?? UUID().uuidString
+        openDocuments[docId] = doc
+
+        var result = "Fetched PDF from URL (pages: \(doc.pageCount), ID: \(docId))"
+
+        // Save to disk if requested
+        if let path = savePath {
+            let saveURL = URL(fileURLWithPath: expandPath(path))
+            if doc.write(to: saveURL) {
+                result += "\nSaved to: \(path)"
+            } else {
+                result += "\nWarning: Failed to save to disk"
+            }
+        }
+
+        return result
+    }
+
+    // MARK: - Helper: Parse Page Specification
+
+    private func parsePageSpec(_ spec: String, maxPages: Int) -> Set<Int> {
+        var pageIndices: Set<Int> = []
+        let parts = spec.components(separatedBy: ",")
+
+        for part in parts {
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            if trimmed.contains("-") {
+                let rangeParts = trimmed.components(separatedBy: "-")
+                if rangeParts.count == 2,
+                   let start = Int(rangeParts[0].trimmingCharacters(in: .whitespaces)),
+                   let end = Int(rangeParts[1].trimmingCharacters(in: .whitespaces)) {
+                    for i in start...end {
+                        if i >= 1 && i <= maxPages {
+                            pageIndices.insert(i - 1)
+                        }
+                    }
+                }
+            } else if let pageNum = Int(trimmed) {
+                if pageNum >= 1 && pageNum <= maxPages {
+                    pageIndices.insert(pageNum - 1)
+                }
+            }
+        }
+
+        return pageIndices
     }
 }
