@@ -980,41 +980,143 @@ actor PDFMCPServer {
 
     // MARK: - Garbled Text Detection & Mixed Content
 
-    /// Detect if text is likely garbled (math formulas, special fonts)
-    private func isLikelyGarbled(_ text: String) -> Bool {
-        guard !text.isEmpty else { return false }
+    /// Represents a garbled region (e.g., math formula) detected on a page
+    private struct GarbledRegion {
+        let bounds: CGRect
+        let charCount: Int
+    }
 
+    /// Quick check if page likely has garbled content (for pre-filtering)
+    private func hasGarbledContent(_ text: String) -> Bool {
         let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
         guard !lines.isEmpty else { return false }
 
-        // Indicator 1: Single character line ratio > 30%
         let singleCharLines = lines.filter { $0.count == 1 }.count
         let singleCharRatio = Double(singleCharLines) / Double(lines.count)
 
-        // Indicator 2: Suspicious patterns (X0, X1, CD2, @digit, control chars)
-        let suspiciousPattern = try? NSRegularExpression(pattern: "[A-Z][0-9]|@\\d|[\\x00-\\x1F]")
-        let suspiciousMatches = suspiciousPattern?.numberOfMatches(
-            in: text,
-            range: NSRange(text.startIndex..., in: text)
-        ) ?? 0
-        let suspiciousRatio = Double(suspiciousMatches) / Double(text.count)
-
-        // Indicator 3: Readability - alphanumeric ratio of non-whitespace chars below 50%
-        let nonWhitespace = text.filter { !$0.isWhitespace }
-        let alphanumeric = nonWhitespace.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }.count
-        let readabilityRatio = nonWhitespace.count > 0 ? Double(alphanumeric) / Double(nonWhitespace.count) : 0
-
-        // Combined judgment (only singleCharRatio and suspicious are primary indicators)
-        // Readability is a secondary check to catch edge cases
-        return singleCharRatio > 0.3 || suspiciousRatio > 0.05 || (readabilityRatio < 0.3 && singleCharRatio > 0.15)
+        return singleCharRatio > 0.2  // Lower threshold for pre-filter
     }
 
-    /// Render a PDF page to Base64-encoded PNG
-    private func renderPageToBase64(page: PDFPage, dpi: Int = 150) throws -> String {
-        let bounds = page.bounds(for: .mediaBox)
+    /// Detect garbled regions (math formulas) on a page using newline-based analysis
+    private func detectGarbledRegions(page: PDFPage) -> [GarbledRegion] {
+        guard let text = page.string, !text.isEmpty else { return [] }
+
+        // Step 1: Split text by newlines to get actual lines
+        let textLines = text.components(separatedBy: "\n")
+
+        // Step 2: Build character index mapping for bounds lookup
+        var charIndex = 0
+        var lineData: [(content: String, startIndex: Int, isSingleChar: Bool)] = []
+
+        for line in textLines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                lineData.append((trimmed, charIndex, trimmed.count == 1))
+            }
+            charIndex += line.count + 1  // +1 for newline
+        }
+
+        guard !lineData.isEmpty else { return [] }
+
+        // Step 3: Find clusters of single-character lines
+        var garbledRegions: [GarbledRegion] = []
+        var clusterStartIdx: Int? = nil
+        var clusterCharIndices: [Int] = []
+
+        for (i, line) in lineData.enumerated() {
+            if line.isSingleChar {
+                if clusterStartIdx == nil {
+                    clusterStartIdx = i
+                }
+                clusterCharIndices.append(line.startIndex)
+            } else {
+                // End of cluster
+                if let _ = clusterStartIdx, clusterCharIndices.count >= 3 {
+                    // Get bounds for all chars in cluster
+                    if let region = getBoundsForCharIndices(page: page, indices: clusterCharIndices) {
+                        garbledRegions.append(region)
+                    }
+                }
+                clusterStartIdx = nil
+                clusterCharIndices = []
+            }
+        }
+
+        // Handle cluster at end
+        if let _ = clusterStartIdx, clusterCharIndices.count >= 3 {
+            if let region = getBoundsForCharIndices(page: page, indices: clusterCharIndices) {
+                garbledRegions.append(region)
+            }
+        }
+
+        // Step 4: Merge nearby regions and add padding
+        let pageBounds = page.bounds(for: .mediaBox)
+        return mergeAndPadRegions(garbledRegions, pageBounds: pageBounds)
+    }
+
+    /// Get combined bounds for a set of character indices
+    private func getBoundsForCharIndices(page: PDFPage, indices: [Int]) -> GarbledRegion? {
+        var combinedBounds: CGRect? = nil
+
+        for idx in indices {
+            let bounds = page.characterBounds(at: idx)
+            if bounds.width > 0 && bounds.height > 0 {
+                if combinedBounds == nil {
+                    combinedBounds = bounds
+                } else {
+                    combinedBounds = combinedBounds?.union(bounds)
+                }
+            }
+        }
+
+        guard let bounds = combinedBounds else { return nil }
+        return GarbledRegion(bounds: bounds, charCount: indices.count)
+    }
+
+    /// Merge nearby garbled regions and add padding
+    private func mergeAndPadRegions(_ regions: [GarbledRegion], pageBounds: CGRect) -> [GarbledRegion] {
+        guard !regions.isEmpty else { return [] }
+
+        let padding: CGFloat = 20  // Points of padding around region
+        let mergeDistance: CGFloat = 50  // Merge regions closer than this
+
+        var merged: [GarbledRegion] = []
+        var current = regions[0]
+
+        for i in 1..<regions.count {
+            let next = regions[i]
+            let gap = next.bounds.minY - current.bounds.maxY
+
+            if abs(gap) < mergeDistance {
+                // Merge regions
+                current = GarbledRegion(
+                    bounds: current.bounds.union(next.bounds),
+                    charCount: current.charCount + next.charCount
+                )
+            } else {
+                merged.append(current)
+                current = next
+            }
+        }
+        merged.append(current)
+
+        // Add padding and clamp to page bounds
+        return merged.map { region in
+            var padded = region.bounds.insetBy(dx: -padding, dy: -padding)
+            padded = padded.intersection(pageBounds)
+            return GarbledRegion(bounds: padded, charCount: region.charCount)
+        }
+    }
+
+    /// Render a specific region of a PDF page to Base64-encoded PNG
+    private func renderRegionToBase64(page: PDFPage, region: CGRect, dpi: Int = 150) throws -> String {
         let scale = CGFloat(dpi) / 72.0
-        let width = Int(bounds.width * scale)
-        let height = Int(bounds.height * scale)
+        let width = Int(region.width * scale)
+        let height = Int(region.height * scale)
+
+        guard width > 0 && height > 0 else {
+            throw PDFError.renderFailed
+        }
 
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
@@ -1029,9 +1131,15 @@ actor PDFMCPServer {
             throw PDFError.renderFailed
         }
 
+        // Fill with white background
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+        // Scale for DPI
         context.scaleBy(x: scale, y: scale)
+
+        // Translate to render only the specified region
+        context.translateBy(x: -region.origin.x, y: -region.origin.y)
 
         guard let pageRef = page.pageRef else {
             throw PDFError.renderFailed
@@ -1053,7 +1161,13 @@ actor PDFMCPServer {
         return pngData.base64EncodedString()
     }
 
-    /// Extract text with mixed content (text + images for garbled pages)
+    /// Render entire page to Base64-encoded PNG (fallback)
+    private func renderPageToBase64(page: PDFPage, dpi: Int = 150) throws -> String {
+        let bounds = page.bounds(for: .mediaBox)
+        return try renderRegionToBase64(page: page, region: bounds, dpi: dpi)
+    }
+
+    /// Extract text with mixed content (text + region images for garbled formulas)
     private func pdfExtractTextWithContent(args: [String: Value]) async throws -> [Tool.Content] {
         let (doc, _) = try getDocumentOrOpen(args: args)
 
@@ -1073,15 +1187,40 @@ actor PDFMCPServer {
             guard let page = doc.page(at: i) else { continue }
             let pageText = page.string ?? ""
 
-            if isLikelyGarbled(pageText) {
-                // Render page as image for garbled content
-                let imageData = try renderPageToBase64(page: page, dpi: 150)
-                contents.append(.image(
-                    data: imageData,
-                    mimeType: "image/png",
-                    metadata: ["page": "\(i + 1)", "reason": "garbled_text_detected"]
-                ))
+            // Quick pre-filter: does this page likely have garbled content?
+            if hasGarbledContent(pageText) {
+                // Detect specific garbled regions
+                let garbledRegions = detectGarbledRegions(page: page)
+
+                if garbledRegions.isEmpty {
+                    // No specific regions found, return plain text
+                    contents.append(.text("--- Page \(i + 1) ---\n\(pageText)\n\n"))
+                } else {
+                    // Return text + region images
+                    contents.append(.text("--- Page \(i + 1) ---\n\(pageText)\n"))
+
+                    for (j, region) in garbledRegions.enumerated() {
+                        do {
+                            let imageData = try renderRegionToBase64(page: page, region: region.bounds, dpi: 150)
+                            contents.append(.image(
+                                data: imageData,
+                                mimeType: "image/png",
+                                metadata: [
+                                    "page": "\(i + 1)",
+                                    "region": "\(j + 1)",
+                                    "width": "\(Int(region.bounds.width))",
+                                    "height": "\(Int(region.bounds.height))",
+                                    "reason": "garbled_formula_detected"
+                                ]
+                            ))
+                        } catch {
+                            // If region rendering fails, skip it
+                            continue
+                        }
+                    }
+                }
             } else {
+                // No garbled content, return plain text
                 contents.append(.text("--- Page \(i + 1) ---\n\(pageText)\n\n"))
             }
         }
