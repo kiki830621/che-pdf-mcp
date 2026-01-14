@@ -630,6 +630,13 @@ actor PDFMCPServer {
         let args = params.arguments ?? [:]
 
         do {
+            // Special handling: tools that support mixed content output
+            if name == "pdf_extract_text" {
+                let contents = try await pdfExtractTextWithContent(args: args)
+                return CallTool.Result(content: contents)
+            }
+
+            // Other tools return plain text
             let result = try await executeToolTask(name: name, args: args)
             return CallTool.Result(content: [.text(result)])
         } catch {
@@ -969,6 +976,121 @@ actor PDFMCPServer {
         }
 
         return fullText
+    }
+
+    // MARK: - Garbled Text Detection & Mixed Content
+
+    /// Detect if text is likely garbled (math formulas, special fonts)
+    private func isLikelyGarbled(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+
+        let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return false }
+
+        // Indicator 1: Single character line ratio > 30%
+        let singleCharLines = lines.filter { $0.count == 1 }.count
+        let singleCharRatio = Double(singleCharLines) / Double(lines.count)
+
+        // Indicator 2: Suspicious patterns (X0, X1, CD2, @digit, control chars)
+        let suspiciousPattern = try? NSRegularExpression(pattern: "[A-Z][0-9]|@\\d|[\\x00-\\x1F]")
+        let suspiciousMatches = suspiciousPattern?.numberOfMatches(
+            in: text,
+            range: NSRange(text.startIndex..., in: text)
+        ) ?? 0
+        let suspiciousRatio = Double(suspiciousMatches) / Double(text.count)
+
+        // Indicator 3: Readability - alphanumeric ratio of non-whitespace chars below 50%
+        let nonWhitespace = text.filter { !$0.isWhitespace }
+        let alphanumeric = nonWhitespace.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }.count
+        let readabilityRatio = nonWhitespace.count > 0 ? Double(alphanumeric) / Double(nonWhitespace.count) : 0
+
+        // Combined judgment (only singleCharRatio and suspicious are primary indicators)
+        // Readability is a secondary check to catch edge cases
+        return singleCharRatio > 0.3 || suspiciousRatio > 0.05 || (readabilityRatio < 0.3 && singleCharRatio > 0.15)
+    }
+
+    /// Render a PDF page to Base64-encoded PNG
+    private func renderPageToBase64(page: PDFPage, dpi: Int = 150) throws -> String {
+        let bounds = page.bounds(for: .mediaBox)
+        let scale = CGFloat(dpi) / 72.0
+        let width = Int(bounds.width * scale)
+        let height = Int(bounds.height * scale)
+
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else {
+            throw PDFError.renderFailed
+        }
+
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.scaleBy(x: scale, y: scale)
+
+        guard let pageRef = page.pageRef else {
+            throw PDFError.renderFailed
+        }
+        context.drawPDFPage(pageRef)
+
+        guard let cgImage = context.makeImage() else {
+            throw PDFError.renderFailed
+        }
+
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+            throw PDFError.renderFailed
+        }
+
+        return pngData.base64EncodedString()
+    }
+
+    /// Extract text with mixed content (text + images for garbled pages)
+    private func pdfExtractTextWithContent(args: [String: Value]) async throws -> [Tool.Content] {
+        let (doc, _) = try getDocumentOrOpen(args: args)
+
+        let startPage = (try? getOptionalParameter(args: args, key: "start_page", as: Int.self)) ?? 1
+        let endPage = (try? getOptionalParameter(args: args, key: "end_page", as: Int.self)) ?? doc.pageCount
+
+        guard startPage >= 1 && startPage <= doc.pageCount else {
+            throw PDFError.invalidPageRange("start_page \(startPage) out of range (1-\(doc.pageCount))")
+        }
+        guard endPage >= startPage && endPage <= doc.pageCount else {
+            throw PDFError.invalidPageRange("end_page \(endPage) out of range (\(startPage)-\(doc.pageCount))")
+        }
+
+        var contents: [Tool.Content] = []
+
+        for i in (startPage - 1)..<endPage {
+            guard let page = doc.page(at: i) else { continue }
+            let pageText = page.string ?? ""
+
+            if isLikelyGarbled(pageText) {
+                // Render page as image for garbled content
+                let imageData = try renderPageToBase64(page: page, dpi: 150)
+                contents.append(.image(
+                    data: imageData,
+                    mimeType: "image/png",
+                    metadata: ["page": "\(i + 1)", "reason": "garbled_text_detected"]
+                ))
+            } else {
+                contents.append(.text("--- Page \(i + 1) ---\n\(pageText)\n\n"))
+            }
+        }
+
+        if contents.isEmpty {
+            return [.text("No content found in the specified pages")]
+        }
+
+        return contents
     }
 
     private func pdfSearchText(args: [String: Value]) async throws -> String {
