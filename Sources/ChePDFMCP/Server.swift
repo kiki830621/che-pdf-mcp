@@ -1109,13 +1109,13 @@ actor PDFMCPServer {
     }
 
     /// Render a specific region of a PDF page to Base64-encoded PNG
-    /// Uses content boundary detection to ensure no clipping
+    /// Adds fixed padding around the region to ensure content isn't clipped
     private func renderRegionToBase64(page: PDFPage, region: CGRect, dpi: Int = 150) throws -> String {
         let scale = CGFloat(dpi) / 72.0
 
-        // Step 1: Render with extra margin to capture any overflow content
-        let extraMargin: CGFloat = 60  // Extra margin for initial render
-        let expandedRegion = region.insetBy(dx: -extraMargin, dy: -extraMargin)
+        // Add fixed padding around the detected region
+        let padding: CGFloat = 25  // Fixed padding to ensure content isn't clipped
+        let expandedRegion = region.insetBy(dx: -padding, dy: -padding)
         let pageBounds = page.bounds(for: .mediaBox)
         let clampedRegion = expandedRegion.intersection(pageBounds)
 
@@ -1156,87 +1156,14 @@ actor PDFMCPServer {
             throw PDFError.renderFailed
         }
 
-        // Step 2: Detect actual content boundary (non-white pixels)
-        let contentBounds = detectContentBoundary(in: cgImage)
-
-        // Step 3: Crop to content boundary with padding
-        let padding: CGFloat = 10  // Final padding around actual content
-        let cropRect = CGRect(
-            x: max(0, contentBounds.minX - padding),
-            y: max(0, contentBounds.minY - padding),
-            width: min(CGFloat(renderWidth), contentBounds.width + padding * 2),
-            height: min(CGFloat(renderHeight), contentBounds.height + padding * 2)
-        ).integral
-
-        // If content bounds is very small or invalid, use original image
-        guard cropRect.width > 20 && cropRect.height > 20,
-              let croppedImage = cgImage.cropping(to: cropRect) else {
-            // Fallback: use full rendered image
-            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: renderWidth, height: renderHeight))
-            guard let tiffData = nsImage.tiffRepresentation,
-                  let bitmapRep = NSBitmapImageRep(data: tiffData),
-                  let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
-                throw PDFError.renderFailed
-            }
-            return pngData.base64EncodedString()
-        }
-
-        let finalImage = NSImage(cgImage: croppedImage, size: cropRect.size)
-
-        guard let tiffData = finalImage.tiffRepresentation,
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: renderWidth, height: renderHeight))
+        guard let tiffData = nsImage.tiffRepresentation,
               let bitmapRep = NSBitmapImageRep(data: tiffData),
               let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
             throw PDFError.renderFailed
         }
 
         return pngData.base64EncodedString()
-    }
-
-    /// Detect the boundary of actual content (non-white pixels) in an image
-    private func detectContentBoundary(in image: CGImage) -> CGRect {
-        let width = image.width
-        let height = image.height
-
-        guard let dataProvider = image.dataProvider,
-              let data = dataProvider.data,
-              let ptr = CFDataGetBytePtr(data) else {
-            return CGRect(x: 0, y: 0, width: width, height: height)
-        }
-
-        let bytesPerPixel = image.bitsPerPixel / 8
-        let bytesPerRow = image.bytesPerRow
-
-        var minX = width
-        var minY = height
-        var maxX = 0
-        var maxY = 0
-
-        // Scan for non-white pixels (threshold: 250 for near-white)
-        let whiteThreshold: UInt8 = 250
-
-        for y in 0..<height {
-            for x in 0..<width {
-                let offset = y * bytesPerRow + x * bytesPerPixel
-                let r = ptr[offset]
-                let g = ptr[offset + 1]
-                let b = ptr[offset + 2]
-
-                // Check if pixel is not white
-                if r < whiteThreshold || g < whiteThreshold || b < whiteThreshold {
-                    minX = min(minX, x)
-                    minY = min(minY, y)
-                    maxX = max(maxX, x)
-                    maxY = max(maxY, y)
-                }
-            }
-        }
-
-        // If no content found, return full image bounds
-        if minX >= maxX || minY >= maxY {
-            return CGRect(x: 0, y: 0, width: width, height: height)
-        }
-
-        return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
     }
 
     /// Render entire page to Base64-encoded PNG (fallback)
