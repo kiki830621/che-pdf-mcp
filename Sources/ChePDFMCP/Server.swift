@@ -1077,7 +1077,7 @@ actor PDFMCPServer {
     private func mergeAndPadRegions(_ regions: [GarbledRegion], pageBounds: CGRect) -> [GarbledRegion] {
         guard !regions.isEmpty else { return [] }
 
-        let padding: CGFloat = 20  // Points of padding around region
+        let padding: CGFloat = 40  // Points of padding around region (enough for subscripts/superscripts)
         let mergeDistance: CGFloat = 50  // Merge regions closer than this
 
         var merged: [GarbledRegion] = []
@@ -1109,20 +1109,28 @@ actor PDFMCPServer {
     }
 
     /// Render a specific region of a PDF page to Base64-encoded PNG
+    /// Uses content boundary detection to ensure no clipping
     private func renderRegionToBase64(page: PDFPage, region: CGRect, dpi: Int = 150) throws -> String {
         let scale = CGFloat(dpi) / 72.0
-        let width = Int(region.width * scale)
-        let height = Int(region.height * scale)
 
-        guard width > 0 && height > 0 else {
+        // Step 1: Render with extra margin to capture any overflow content
+        let extraMargin: CGFloat = 60  // Extra margin for initial render
+        let expandedRegion = region.insetBy(dx: -extraMargin, dy: -extraMargin)
+        let pageBounds = page.bounds(for: .mediaBox)
+        let clampedRegion = expandedRegion.intersection(pageBounds)
+
+        let renderWidth = Int(clampedRegion.width * scale)
+        let renderHeight = Int(clampedRegion.height * scale)
+
+        guard renderWidth > 0 && renderHeight > 0 else {
             throw PDFError.renderFailed
         }
 
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
                 data: nil,
-                width: width,
-                height: height,
+                width: renderWidth,
+                height: renderHeight,
                 bitsPerComponent: 8,
                 bytesPerRow: 0,
                 space: colorSpace,
@@ -1133,13 +1141,11 @@ actor PDFMCPServer {
 
         // Fill with white background
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.fill(CGRect(x: 0, y: 0, width: renderWidth, height: renderHeight))
 
-        // Scale for DPI
+        // Scale and translate
         context.scaleBy(x: scale, y: scale)
-
-        // Translate to render only the specified region
-        context.translateBy(x: -region.origin.x, y: -region.origin.y)
+        context.translateBy(x: -clampedRegion.origin.x, y: -clampedRegion.origin.y)
 
         guard let pageRef = page.pageRef else {
             throw PDFError.renderFailed
@@ -1150,15 +1156,87 @@ actor PDFMCPServer {
             throw PDFError.renderFailed
         }
 
-        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+        // Step 2: Detect actual content boundary (non-white pixels)
+        let contentBounds = detectContentBoundary(in: cgImage)
 
-        guard let tiffData = nsImage.tiffRepresentation,
+        // Step 3: Crop to content boundary with padding
+        let padding: CGFloat = 10  // Final padding around actual content
+        let cropRect = CGRect(
+            x: max(0, contentBounds.minX - padding),
+            y: max(0, contentBounds.minY - padding),
+            width: min(CGFloat(renderWidth), contentBounds.width + padding * 2),
+            height: min(CGFloat(renderHeight), contentBounds.height + padding * 2)
+        ).integral
+
+        // If content bounds is very small or invalid, use original image
+        guard cropRect.width > 20 && cropRect.height > 20,
+              let croppedImage = cgImage.cropping(to: cropRect) else {
+            // Fallback: use full rendered image
+            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: renderWidth, height: renderHeight))
+            guard let tiffData = nsImage.tiffRepresentation,
+                  let bitmapRep = NSBitmapImageRep(data: tiffData),
+                  let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+                throw PDFError.renderFailed
+            }
+            return pngData.base64EncodedString()
+        }
+
+        let finalImage = NSImage(cgImage: croppedImage, size: cropRect.size)
+
+        guard let tiffData = finalImage.tiffRepresentation,
               let bitmapRep = NSBitmapImageRep(data: tiffData),
               let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
             throw PDFError.renderFailed
         }
 
         return pngData.base64EncodedString()
+    }
+
+    /// Detect the boundary of actual content (non-white pixels) in an image
+    private func detectContentBoundary(in image: CGImage) -> CGRect {
+        let width = image.width
+        let height = image.height
+
+        guard let dataProvider = image.dataProvider,
+              let data = dataProvider.data,
+              let ptr = CFDataGetBytePtr(data) else {
+            return CGRect(x: 0, y: 0, width: width, height: height)
+        }
+
+        let bytesPerPixel = image.bitsPerPixel / 8
+        let bytesPerRow = image.bytesPerRow
+
+        var minX = width
+        var minY = height
+        var maxX = 0
+        var maxY = 0
+
+        // Scan for non-white pixels (threshold: 250 for near-white)
+        let whiteThreshold: UInt8 = 250
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                let r = ptr[offset]
+                let g = ptr[offset + 1]
+                let b = ptr[offset + 2]
+
+                // Check if pixel is not white
+                if r < whiteThreshold || g < whiteThreshold || b < whiteThreshold {
+                    minX = min(minX, x)
+                    minY = min(minY, y)
+                    maxX = max(maxX, x)
+                    maxY = max(maxY, y)
+                }
+            }
+        }
+
+        // If no content found, return full image bounds
+        if minX >= maxX || minY >= maxY {
+            return CGRect(x: 0, y: 0, width: width, height: height)
+        }
+
+        return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
     }
 
     /// Render entire page to Base64-encoded PNG (fallback)
