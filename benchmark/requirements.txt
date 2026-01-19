@@ -1,0 +1,16 @@
+# PDF extraction libraries to compare
+pypdfium2>=4.30.0
+pymupdf>=1.24.0
+pdfplumber>=0.10.0
+
+# pdftext (from reference)
+pdftext>=0.3.0
+
+# Benchmarking utilities
+rapidfuzz>=3.0.0
+tabulate>=0.9.0
+tqdm>=4.65.0
+
+# For visualization
+matplotlib>=3.7.0
+pandas>=2.0.0

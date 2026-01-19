@@ -1,0 +1,76 @@
+{
+  "summary": {
+    "pymupdf": {
+      "avg_time": 0.04173111915588379,
+      "avg_alignment": null,
+      "avg_garbled_ratio": 0.039603960396039604
+    },
+    "pdftext": {
+      "avg_time": 0.0903167724609375,
+      "avg_alignment": 98.57142857142858,
+      "avg_garbled_ratio": 0.06701030927835051
+    },
+    "pdfplumber": {
+      "avg_time": 0.19269824028015137,
+      "avg_alignment": 59.37142545890299,
+      "avg_garbled_ratio": 0.05263157894736842
+    },
+    "che-pdf-mcp": {
+      "avg_time": 0.0678718090057373,
+      "avg_alignment": 95.15567282321899,
+      "avg_garbled_ratio": 0.027472527472527472
+    }
+  },
+  "details": [
+    {
+      "file": "adversarial_short.pdf",
+      "times": {
+        "pymupdf": 0.04173111915588379,
+        "pdftext": 0.0903167724609375,
+        "pdfplumber": 0.19269824028015137,
+        "che-pdf-mcp": 0.0678718090057373
+      },
+      "alignments": {
+        "pdftext": 98.57142857142858,
+        "pdfplumber": 59.37142545890299,
+        "che-pdf-mcp": 95.15567282321899
+      },
+      "garbled_ratios": {
+        "pymupdf": 0.039603960396039604,
+        "pdftext": 0.06701030927835051,
+        "pdfplumber": 0.05263157894736842,
+        "che-pdf-mcp": 0.027472527472527472
+      },
+      "structures": {
+        "pymupdf": {
+          "total_chars": 9504,
+          "total_lines": 251,
+          "total_words": 1466,
+          "avg_line_length": 36.86852589641434,
+          "empty_lines": 49
+        },
+        "pdftext": {
+          "total_chars": 9396,
+          "total_lines": 234,
+          "total_words": 1419,
+          "avg_line_length": 39.15811965811966,
+          "empty_lines": 40
+        },
+        "pdfplumber": {
+          "total_chars": 8855,
+          "total_lines": 138,
+          "total_words": 861,
+          "avg_line_length": 63.17391304347826,
+          "empty_lines": 5
+        },
+        "che-pdf-mcp": {
+          "total_chars": 9446,
+          "total_lines": 188,
+          "total_words": 1463,
+          "avg_line_length": 49.25,
+          "empty_lines": 6
+        }
+      }
+    }
+  ]
+}

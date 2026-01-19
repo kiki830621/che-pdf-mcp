@@ -26,3 +26,6 @@ xcuserdata/
 # Test files
 *.pdf
 !Fixtures/*.pdf
+
+# Reference repos
+reference/
